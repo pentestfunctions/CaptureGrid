@@ -17,12 +17,17 @@
         h1 {
             text-shadow: 0 0 10px #00ff00;
         }
+        #game-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            max-width: 1200px;
+        }
         #game-info {
             display: flex;
+            flex-direction: column;
             justify-content: space-between;
-            width: 100%;
-            max-width: 800px;
-            margin-bottom: 20px;
+            margin-right: 20px;
         }
         #grid {
             display: grid;
@@ -37,13 +42,19 @@
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
         .challenge:hover {
             background-color: #3a3a3a;
             transform: scale(1.05);
         }
+        .challenge.claimed-red { background-color: #8B0000; }
+        .challenge.claimed-blue { background-color: #00008B; }
+        .challenge.claimed-green { background-color: #006400; }
         .challenge.claimed {
-            background-color: #006400;
             cursor: not-allowed;
         }
         .challenge-name {
@@ -53,15 +64,52 @@
         .challenge-status {
             font-size: 10px;
         }
+        #graph {
+            display: flex;
+            align-items: flex-end;
+            height: 300px;
+            margin-top: 20px;
+        }
+        .bar {
+            width: 50px;
+            margin: 0 10px;
+            transition: height 0.5s ease;
+        }
+        .bar-red { background-color: #FF0000; }
+        .bar-blue { background-color: #0000FF; }
+        .bar-green { background-color: #00FF00; }
+        .bar-label {
+            text-align: center;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
     <h1>CaptureGrid: Hacker CTF Bingo</h1>
-    <div id="game-info">
-        <div>User: Guest (Green Team)</div>
-        <div>Green Team Points: <span id="green-points">0</span></div>
+    <div id="game-container">
+        <div id="game-info">
+            <div>User: Guest (Green Team)</div>
+            <div>Time Left: <span id="timer">05:00</span></div>
+            <div>Red Team Points: <span id="red-points">0</span></div>
+            <div>Blue Team Points: <span id="blue-points">0</span></div>
+            <div>Green Team Points: <span id="green-points">0</span></div>
+            <div id="graph">
+                <div>
+                    <div class="bar bar-red" id="red-bar"></div>
+                    <div class="bar-label">Red</div>
+                </div>
+                <div>
+                    <div class="bar bar-blue" id="blue-bar"></div>
+                    <div class="bar-label">Blue</div>
+                </div>
+                <div>
+                    <div class="bar bar-green" id="green-bar"></div>
+                    <div class="bar-label">Green</div>
+                </div>
+            </div>
+        </div>
+        <div id="grid"></div>
     </div>
-    <div id="grid"></div>
 
     <script>
         const challengeNames = [
@@ -76,7 +124,11 @@
             "Firmware Fandango", "Keylogger Karaoke", "Wireshark Waltz", "Metasploit Mambo"
         ];
 
-        let greenPoints = 0;
+        const teams = ['red', 'blue', 'green'];
+        let points = {red: 0, blue: 0, green: 0};
+        let timeLeft = 300; // 5 minutes in seconds
+        let gameSimulationInterval;
+        let timerInterval;
 
         function createGrid() {
             const grid = document.getElementById('grid');
@@ -87,25 +139,86 @@
                     <div class="challenge-name">${name}</div>
                     <div class="challenge-status">Unclaimed</div>
                 `;
-                challenge.onclick = () => claimChallenge(challenge);
+                challenge.onclick = () => claimChallenge(challenge, 'green');
                 grid.appendChild(challenge);
             });
         }
 
-        function claimChallenge(challenge) {
+        function claimChallenge(challenge, team) {
             if (!challenge.classList.contains('claimed')) {
                 challenge.classList.add('claimed');
-                challenge.querySelector('.challenge-status').textContent = 'Claimed';
-                greenPoints++;
+                challenge.classList.add(`claimed-${team}`);
+                challenge.querySelector('.challenge-status').textContent = `Claimed by ${team}`;
+                points[team]++;
                 updatePoints();
+                updateGraph();
+                checkGameEnd();
             }
         }
 
         function updatePoints() {
-            document.getElementById('green-points').textContent = greenPoints;
+            teams.forEach(team => {
+                document.getElementById(`${team}-points`).textContent = points[team];
+            });
         }
 
-        createGrid();
+        function updateGraph() {
+            const maxPoints = Math.max(...Object.values(points));
+            teams.forEach(team => {
+                const bar = document.getElementById(`${team}-bar`);
+                const height = maxPoints > 0 ? (points[team] / maxPoints) * 280 : 0; // 280px is max height
+                bar.style.height = `${height}px`;
+            });
+        }
+
+        function simulateGame() {
+            const unclaimedChallenges = Array.from(document.getElementsByClassName('challenge'))
+                .filter(c => !c.classList.contains('claimed'));
+            
+            if (unclaimedChallenges.length > 0) {
+                const randomChallenge = unclaimedChallenges[Math.floor(Math.random() * unclaimedChallenges.length)];
+                const randomTeam = teams[Math.floor(Math.random() * (teams.length - 1))]; // Exclude green (player's team)
+                claimChallenge(randomChallenge, randomTeam);
+            }
+        }
+
+        function updateTimer() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timer').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (timeLeft > 0) {
+                timeLeft--;
+            } else {
+                endGame("Time's up!");
+            }
+        }
+
+        function checkGameEnd() {
+            const allChallengesClaimed = Array.from(document.getElementsByClassName('challenge'))
+                .every(c => c.classList.contains('claimed'));
+            
+            if (allChallengesClaimed) {
+                endGame("All challenges have been claimed!");
+            }
+        }
+
+        function endGame(reason) {
+            clearInterval(gameSimulationInterval);
+            clearInterval(timerInterval);
+            const winner = Object.entries(points).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+            alert(`Game Over! ${winner.charAt(0).toUpperCase() + winner.slice(1)} team wins! ${reason}`);
+        }
+
+        function startGame() {
+            createGrid();
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+            gameSimulationInterval = setInterval(simulateGame, 3000); // Simulate a claim every 3 seconds
+        }
+
+        startGame();
     </script>
 </body>
 </html>
