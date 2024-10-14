@@ -11,11 +11,12 @@
             color: #00ff00;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: left;
             padding: 20px;
         }
         h1 {
             text-shadow: 0 0 10px #00ff00;
+            text-align: center;
         }
         #game-container {
             display: flex;
@@ -31,7 +32,7 @@
         }
         #grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(7, 1fr);
             gap: 10px;
             max-width: 800px;
         }
@@ -40,9 +41,9 @@
             border: 1px solid #00ff00;
             padding: 10px;
             text-align: center;
-            cursor: pointer;
             transition: all 0.3s ease;
-            height: 80px;
+            height: 180px; /* Increased height to accommodate buttons */
+            width: 120px; /* Slightly increased width */
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -54,15 +55,52 @@
         .challenge.claimed-red { background-color: #8B0000; }
         .challenge.claimed-blue { background-color: #00008B; }
         .challenge.claimed-green { background-color: #006400; }
-        .challenge.claimed {
-            cursor: not-allowed;
+        .challenge.claimed .challenge-buttons {
+            display: none;
         }
         .challenge-name {
             font-size: 12px;
             margin-bottom: 5px;
+            height: 40px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .challenge-status {
             font-size: 10px;
+            height: 20px;
+        }
+        .challenge-prize {
+            font-size: 10px;
+            color: #FFD700;
+            height: 30px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .challenge-buttons {
+            display: flex;
+            flex-direction: column; /* Changed to column layout */
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+            height: 60px; /* Increased height for buttons */
+        }
+        .challenge-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 10px; /* Slightly reduced font size */
+            margin: 2px 0; /* Adjusted margin */
+            cursor: pointer;
+            border-radius: 3px;
+            width: 90%; /* Set width relative to parent */
         }
         #graph {
             display: flex;
@@ -81,6 +119,33 @@
         .bar-label {
             text-align: center;
             margin-top: 5px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #2a2a2a;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #00ff00;
+            width: 80%;
+            max-width: 600px;
+            color: #00ff00;
+        }
+        .close {
+            color: #00ff00;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -111,6 +176,14 @@
         <div id="grid"></div>
     </div>
 
+    <div id="challengeModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalChallengeName"></h2>
+            <p id="modalChallengeDetails"></p>
+        </div>
+    </div>
+
     <script>
         const challengeNames = [
             "SQLpuppy", "SSHhhh in the Library", "Reverse Gear", "Web Weaver",
@@ -121,7 +194,13 @@
             "Zero-Day Zoo", "Firewall Fiesta", "Sandbox Escape", "Heap Heap Hooray",
             "OSINT Oracle", "Reverse Shell Roulette", "DLL Dillema", "Kerberos Kerfuffle",
             "Cipher Salad", "Format String Fiasco", "Race Condition Rally", "Shellcode Shuffle",
-            "Firmware Fandango", "Keylogger Karaoke", "Wireshark Waltz", "Metasploit Mambo"
+            "Firmware Fandango", "Keylogger Karaoke", "Wireshark Waltz"
+        ];
+
+        const prizes = [
+            "$100 PayPal", "Hak5 WiFi Pineapple", "Proxmark3 Kit", "1-Year VPN Subscription",
+            "Custom Hoodie", "Raspberry Pi 4", "Bug Bounty Swag Pack", "Arduino Starter Kit",
+            "$50 DigitalOcean Credit", "Rubber Ducky", "Lockpick Set", "CTF Champion Trophy"
         ];
 
         const teams = ['red', 'blue', 'green'];
@@ -135,24 +214,52 @@
             challengeNames.forEach((name, index) => {
                 const challenge = document.createElement('div');
                 challenge.className = 'challenge';
+                const hasPrize = Math.random() < 0.3; // 30% chance of having a prize
+                const prize = hasPrize ? prizes[Math.floor(Math.random() * prizes.length)] : null;
                 challenge.innerHTML = `
                     <div class="challenge-name">${name}</div>
                     <div class="challenge-status">Unclaimed</div>
+                    ${prize ? `<div class="challenge-prize">Prize: ${prize}</div>` : ''}
+                    <div class="challenge-buttons">
+                        <button class="challenge-button view-challenge">View Challenge</button>
+                        <button class="challenge-button submit-challenge">Submit</button>
+                    </div>
                 `;
-                challenge.onclick = () => claimChallenge(challenge, 'green');
+                challenge.querySelector('.view-challenge').onclick = () => viewChallenge(name);
+                challenge.querySelector('.submit-challenge').onclick = () => submitChallenge(challenge, 'green');
                 grid.appendChild(challenge);
             });
         }
 
-        function claimChallenge(challenge, team) {
+        function viewChallenge(name) {
+            const modal = document.getElementById('challengeModal');
+            const modalChallengeName = document.getElementById('modalChallengeName');
+            const modalChallengeDetails = document.getElementById('modalChallengeDetails');
+
+            modalChallengeName.textContent = name;
+            modalChallengeDetails.textContent = `This is a detailed description of the ${name} challenge. It includes information about the challenge, hints, and any relevant resources.`;
+
+            modal.style.display = "block";
+        }
+
+        function submitChallenge(challenge, team) {
             if (!challenge.classList.contains('claimed')) {
-                challenge.classList.add('claimed');
-                challenge.classList.add(`claimed-${team}`);
-                challenge.querySelector('.challenge-status').textContent = `Claimed by ${team}`;
-                points[team]++;
-                updatePoints();
-                updateGraph();
-                checkGameEnd();
+                claimChallenge(challenge, team);
+            }
+        }
+
+        function claimChallenge(challenge, team) {
+            challenge.classList.add('claimed');
+            challenge.classList.add(`claimed-${team}`);
+            challenge.querySelector('.challenge-status').textContent = `Claimed by ${team}`;
+            points[team]++;
+            updatePoints();
+            updateGraph();
+            checkGameEnd();
+
+            const prizeElement = challenge.querySelector('.challenge-prize');
+            if (prizeElement) {
+                //alert(`${team.toUpperCase()} team won: ${prizeElement.textContent}`);
             }
         }
 
@@ -216,6 +323,20 @@
             updateTimer();
             timerInterval = setInterval(updateTimer, 1000);
             gameSimulationInterval = setInterval(simulateGame, 3000); // Simulate a claim every 3 seconds
+        }
+
+        // Modal close functionality
+        const modal = document.getElementById('challengeModal');
+        const span = document.getElementsByClassName("close")[0];
+
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
         }
 
         startGame();
